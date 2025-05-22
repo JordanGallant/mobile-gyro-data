@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Gyro Sender</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { 
+      font-family: sans-serif; 
+      padding: 2rem; 
+      text-align: center; 
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      min-height: 100vh;
+      margin: 0;
+    }
+    .container {
+      max-width: 400px;
+      margin: 0 auto;
+      background: rgba(255,255,255,0.1);
+      padding: 2rem;
+      border-radius: 15px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    }
+    button { 
+      padding: 1rem 2rem; 
+      font-size: 1.2rem; 
+      border: none;
+      border-radius: 25px;
+      background: #ff6b6b;
+      color: white;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+    button:hover:not(:disabled) {
+      background: #ff5252;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .status { 
+      margin: 1rem 0; 
+      font-weight: bold; 
+      padding: 1rem;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.1);
+      backdrop-filter: blur(5px);
+    }
+    .status.success {
+      background: rgba(76, 175, 80, 0.3);
+      border: 1px solid rgba(76, 175, 80, 0.5);
+    }
+    .status.error {
+      background: rgba(244, 67, 54, 0.3);
+      border: 1px solid rgba(244, 67, 54, 0.5);
+    }
+    .status.warning {
+      background: rgba(255, 193, 7, 0.3);
+      border: 1px solid rgba(255, 193, 7, 0.5);
+    }
+    .data-display {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1rem;
+      margin: 2rem 0;
+    }
+    .data-item {
+      background: rgba(255,255,255,0.1);
+      padding: 1rem;
+      border-radius: 10px;
+      backdrop-filter: blur(5px);
+    }
+    .data-label {
+      font-size: 0.8rem;
+      opacity: 0.8;
+      margin-bottom: 0.5rem;
+    }
+    .data-value {
+      font-size: 1.2rem;
+      font-weight: bold;
+    }
+    .connection-indicator {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 0.5rem;
+      background: #ccc;
+    }
+    .connection-indicator.connected {
+      background: #4caf50;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.5; }
+      100% { opacity: 1; }
+    }
+    .info {
+      font-size: 0.9rem;
+      opacity: 0.8;
+      margin-top: 2rem;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📱 Gyroscope Sender</h1>
+    <button id="startButton">Enable Gyroscope</button>
+    <div id="status" class="status">Waiting for user interaction...</div>
+    
+    <div class="connection-indicator" id="connectionIndicator"></div>
+    <span id="connectionStatus">Disconnected</span>
+
+    <div class="data-display" id="dataDisplay" style="display: none;">
+      <div class="data-item">
+        <div class="data-label">Alpha</div>
+        <div class="data-value" id="alphaDisplay">--</div>
+      </div>
+      <div class="data-item">
+        <div class="data-label">Beta</div>
+        <div class="data-value" id="betaDisplay">--</div>
+      </div>
+      <div class="data-item">
+        <div class="data-label">Gamma</div>
+        <div class="data-value" id="gammaDisplay">--</div>
+      </div>
+    </div>
+
+    <div class="info">
+      <p><strong>Instructions:</strong></p>
+      <p>1. Tap "Enable Gyroscope" button</p>
+      <p>2. Grant permission when prompted</p>
+      <p>3. Move your device to send orientation data</p>
+      <p>4. View the data on your computer's viewer page</p>
+    </div>
+  </div>
+
+  <script>
+    let socket;
+    let isStreaming = false;
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 5;
+
+    function updateStatus(message, type = '') {
+      const statusEl = document.getElementById('status');
+      statusEl.textContent = message;
+      statusEl.className = `status ${type}`;
+    }
+
+    function updateConnectionStatus(connected) {
+      const indicator = document.getElementById('connectionIndicator');
+      const status = document.getElementById('connectionStatus');
+      
+      if (connected) {
+        indicator.classList.add('connected');
+        status.textContent = 'Connected';
+      } else {
+        indicator.classList.remove('connected');
+        status.textContent = 'Disconnected';
+      }
+    }
+
+    function sendGyro(alpha, beta, gamma) {
+      // Validate data
+      if (alpha === null || beta === null || gamma === null) {
+        return;
+      }
+
+      const data = {
+        type: "gyro",
+        alpha: Math.round(alpha * 10) / 10, // Round to 1 decimal place
+        beta: Math.round(beta * 10) / 10,
+        gamma: Math.round(gamma * 10) / 10,
+        timestamp: Date.now()
+      };
+
+      // Update display
+      document.getElementById('alphaDisplay').textContent = data.alpha.toFixed(1) + '°';
+      document.getElementById('betaDisplay').textContent = data.beta.toFixed(1) + '°';
+      document.getElementById('gammaDisplay').textContent = data.gamma.toFixed(1) + '°';
+
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify(data));
+      }
+    }
+
+    function connectWebSocket() {
+      if (socket && socket.readyState === WebSocket.CONNECTING) {
+        return; // Already connecting
+      }
+
+      updateStatus(`Connecting to server... (Attempt ${reconnectAttempts + 1})`, 'warning');
+      
+      socket = new WebSocket(`ws://${location.host}`);
+
+      socket.onopen = () => {
+        socket.send(JSON.stringify({ type: "sender" }));
+        updateConnectionStatus(true);
+        updateStatus("Connected to server", 'success');
+        reconnectAttempts = 0;
+        
+        if (isStreaming) {
+          updateStatus("Streaming gyroscope data...", 'success');
+        }
+      };
+
+      socket.onclose = () => {
+        updateConnectionStatus(false);
+        
+        if (reconnectAttempts < maxReconnectAttempts) {
+          reconnectAttempts++;
+          updateStatus(`Connection lost. Reconnecting in 3 seconds... (${reconnectAttempts}/${maxReconnectAttempts})`, 'warning');
+          setTimeout(connectWebSocket, 3000);
+        } else {
+          updateStatus("Connection failed. Please refresh the page.", 'error');
+        }
+      };
+
+      socket.onerror = (error) => {
+        console.error("WebSocket error:", error);
+        updateStatus("Connection error occurred", 'error');
+      };
+    }
+
+    function setupSocketAndStartSensor() {
+      const startButton = document.getElementById('startButton');
+      startButton.disabled = true;
+      startButton.textContent = 'Enabling...';
+
+      // Connect WebSocket first
+      connectWebSocket();
+
+      const enableSensor = () => {
+        window.addEventListener("deviceorientation", (e) => {
+          sendGyro(e.alpha, e.beta, e.gamma);
+        });
+        
+        isStreaming = true;
+        document.getElementById('dataDisplay').style.display = 'grid';
+        updateStatus("Streaming gyroscope data...", 'success');
+        startButton.textContent = 'Gyroscope Active';
+        startButton.style.background = '#4caf50';
+      };
+
+      // Check if device supports orientation
+      if (!window.DeviceOrientationEvent) {
+        updateStatus("Device orientation not supported on this device", 'error');
+        startButton.disabled = false;
+        startButton.textContent = 'Not Supported';
+        return;
+      }
+
+      if (typeof DeviceOrientationEvent?.requestPermission === "function") {
+        // iOS 13+
+        DeviceOrientationEvent.requestPermission()
+          .then(permission => {
+            if (permission === "granted") {
+              enableSensor();
+            } else {
+              updateStatus("Permission denied for device orientation", 'error');
+              startButton.disabled = false;
+              startButton.textContent = 'Permission Denied';
+            }
+          })
+          .catch((err) => {
+            console.error("Permission error:", err);
+            updateStatus("Error requesting permission: " + err.message, 'error');
+            startButton.disabled = false;
+            startButton.textContent = 'Error';
+          });
+      } else {
+        // Android or older iOS
+        enableSensor();
+      }
+    }
+
+    // Add event listener
+    document.getElementById("startButton").addEventListener("click", setupSocketAndStartSensor);
+
+    // Test device orientation support on load
+    window.addEventListener('load', () => {
+      if (!window.DeviceOrientationEvent) {
+        updateStatus("Device orientation not supported on this device", 'error');
+        document.getElementById('startButton').disabled = true;
+        document.getElementById('startButton').textContent = 'Not Supported';
+      }
+    });
+  </script>
+</body>
+</html>
