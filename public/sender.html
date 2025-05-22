@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Gyro Sender</title>
+  <title>Gyro Connector</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body { 
@@ -101,17 +101,11 @@
       50% { opacity: 0.5; }
       100% { opacity: 1; }
     }
-    .info {
-      font-size: 0.9rem;
-      opacity: 0.8;
-      margin-top: 2rem;
-      line-height: 1.5;
-    }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>📱 Gyroscope Sender</h1>
+    <h1>Gyroscope Connector</h1>
     <button id="startButton">Enable Gyroscope</button>
     <div id="status" class="status">Waiting for user interaction...</div>
     
@@ -131,14 +125,6 @@
         <div class="data-label">Gamma</div>
         <div class="data-value" id="gammaDisplay">--</div>
       </div>
-    </div>
-
-    <div class="info">
-      <p><strong>Instructions:</strong></p>
-      <p>1. Tap "Enable Gyroscope" button</p>
-      <p>2. Grant permission when prompted</p>
-      <p>3. Move your device to send orientation data</p>
-      <p>4. View the data on your computer's viewer page</p>
     </div>
   </div>
 
@@ -168,20 +154,20 @@
     }
 
     function sendGyro(alpha, beta, gamma) {
-      // Validate data
+      //first check if data exisits
       if (alpha === null || beta === null || gamma === null) {
         return;
       }
-
+      //clean up data
       const data = {
         type: "gyro",
-        alpha: Math.round(alpha * 10) / 10, // Round to 1 decimal place
+        alpha: Math.round(alpha * 10) / 10, 
         beta: Math.round(beta * 10) / 10,
         gamma: Math.round(gamma * 10) / 10,
         timestamp: Date.now()
       };
 
-      // Update display
+      // update display
       document.getElementById('alphaDisplay').textContent = data.alpha.toFixed(1) + '°';
       document.getElementById('betaDisplay').textContent = data.beta.toFixed(1) + '°';
       document.getElementById('gammaDisplay').textContent = data.gamma.toFixed(1) + '°';
@@ -193,12 +179,12 @@
 
     function connectWebSocket() {
       if (socket && socket.readyState === WebSocket.CONNECTING) {
-        return; // Already connecting
+        return; // checks if already connected
       }
 
       updateStatus(`Connecting to server... (Attempt ${reconnectAttempts + 1})`, 'warning');
       
-      // Use secure WebSocket (wss) if page is loaded over HTTPS, otherwise use ws
+      //ensure communication is over wss
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${protocol}//${location.host}`;
       
@@ -280,7 +266,7 @@
         enableSensor();
       }
     }
-
+    //when clicked set up socket connection
     document.getElementById("startButton").addEventListener("click", setupSocketAndStartSensor);
 
     window.addEventListener('load', () => {
