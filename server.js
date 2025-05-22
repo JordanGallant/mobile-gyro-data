@@ -1,6 +1,4 @@
 const express = require("express");
-const https = require('https');
-const QRCode = require('qrcode');
 const os = require('os');
 const cors = require("cors")
 const http = require("http");
@@ -15,6 +13,8 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+
 
 app.get('/viewer', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'viewer.html'));
@@ -52,32 +52,9 @@ wss.on("connection", (ws, req) => {
 
 app.use(express.static("public"));
 
-function getLocalIP() {
-  const interfaces = os.networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    for (const interface of interfaces[name]) {
-      if (interface.family === 'IPv4' && !interface.internal) {
-        return interface.address;
-      }
-    }
-  }
-  return 'localhost';
-}
+
 
 const PORT = 3000;
 server.listen(PORT, async () => {
-  const localIP = getLocalIP();
-  const url = `http://${localIP}:${PORT}/sender.html`;
-  
-  console.log(`Server running on ${PORT}`);
-  console.log(`Access URL: ${url}`);
-  console.log('\nQR Code:');
-  
-  try {
-    // Generate QR code in terminal
-    const qrString = await QRCode.toString(url, { type: 'terminal' });
-    console.log(qrString);
-  } catch (error) {
-    console.error('Error generating QR code:', error);
-  }
+console.log(`running on Port:${PORT}`)
 });
