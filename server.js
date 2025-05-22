@@ -15,11 +15,11 @@ app.use(cors({
 }));
 
 
-
+//endpoint to view
 app.get('/viewer', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'viewer.html'));
 });
-
+//endpoint to send
 app.get('/sender', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'sender.html'));
 });

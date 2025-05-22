@@ -199,7 +199,11 @@
     function connectWebSocket() {
       updateStatus('Connecting to server...', 'waiting');
       
-      socket = new WebSocket(`ws://${location.host}`);
+      // Use secure WebSocket (wss) if page is loaded over HTTPS, otherwise use ws
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${location.host}`;
+      
+      socket = new WebSocket(wsUrl);
 
       socket.onopen = () => {
         socket.send(JSON.stringify({ type: "viewer" }));

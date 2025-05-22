@@ -198,7 +198,11 @@
 
       updateStatus(`Connecting to server... (Attempt ${reconnectAttempts + 1})`, 'warning');
       
-      socket = new WebSocket(`ws://${location.host}`);
+      // Use secure WebSocket (wss) if page is loaded over HTTPS, otherwise use ws
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${location.host}`;
+      
+      socket = new WebSocket(wsUrl);
 
       socket.onopen = () => {
         socket.send(JSON.stringify({ type: "sender" }));
@@ -234,7 +238,6 @@
       startButton.disabled = true;
       startButton.textContent = 'Enabling...';
 
-      // Connect WebSocket first
       connectWebSocket();
 
       const enableSensor = () => {
@@ -249,7 +252,6 @@
         startButton.style.background = '#4caf50';
       };
 
-      // Check if device supports orientation
       if (!window.DeviceOrientationEvent) {
         updateStatus("Device orientation not supported on this device", 'error');
         startButton.disabled = false;
@@ -258,7 +260,6 @@
       }
 
       if (typeof DeviceOrientationEvent?.requestPermission === "function") {
-        // iOS 13+
         DeviceOrientationEvent.requestPermission()
           .then(permission => {
             if (permission === "granted") {
@@ -276,15 +277,12 @@
             startButton.textContent = 'Error';
           });
       } else {
-        // Android or older iOS
         enableSensor();
       }
     }
 
-    // Add event listener
     document.getElementById("startButton").addEventListener("click", setupSocketAndStartSensor);
 
-    // Test device orientation support on load
     window.addEventListener('load', () => {
       if (!window.DeviceOrientationEvent) {
         updateStatus("Device orientation not supported on this device", 'error');
