@@ -1,71 +1,276 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Gyro Camera Control</title>
+  <title>Babylon.js Gyro Viewer</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script type="module" src="https://cdn.jsdelivr.net/npm/@babylonjs/viewer@8.9.1/dist/babylon-viewer.esm.min.js"></script>
   <style>
-    html, body { width: 100%; height: 100%; padding: 0; margin: 0; overflow: hidden; background: #000; color: #fff; font-family: sans-serif; }
-    .overlay {
+    html, body { 
+      width: 100%; 
+      height: 100%; 
+      padding: 0; 
+      margin: 0; 
+      overflow: hidden; 
+      font-family: sans-serif;
+      background: #000000;
+    }
+    
+    #babylonCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    
+    .ui-overlay {
       position: absolute;
-      top: 1rem;
-      left: 1rem;
-      background: rgba(0,0,0,0.5);
-      padding: 1rem;
+      top: 20px;
+      left: 20px;
+      z-index: 100;
+      pointer-events: none;
+    }
+    
+    .status {
+      padding: 12px 20px;
       border-radius: 8px;
-      z-index: 10;
+      font-weight: bold;
+      margin-bottom: 10px;
+      backdrop-filter: blur(10px);
+      border: 2px solid;
+    }
+    
+    .status.connected {
+      background: rgba(0, 0, 0, 0.8);
+      color: #ffffff;
+      border-color: #01ff3c;
+    }
+    
+    .status.disconnected {
+      background: rgba(0, 0, 0, 0.8);
+      color: #ffffff;
+      border-color: #f40018;
+    }
+    
+    .status.waiting {
+      background: rgba(0, 0, 0, 0.8);
+      color: #ffffff;
+      border-color: #ffc400;
+    }
+    
+    .data-panel {
+      display: flex;
+      gap: 15px;
+    }
+    
+    .data-item {
+      background: rgba(0, 0, 0, 0.7);
+      padding: 10px 15px;
+      border-radius: 6px;
+      color: white;
+      backdrop-filter: blur(5px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      transition: border-color 0.3s ease;
+    }
+    
+    .data-item.active {
+      border-color: #007bff;
+    }
+    
+    .data-label {
+      font-size: 0.8rem;
+      opacity: 0.8;
+      margin-bottom: 2px;
+    }
+    
+    .data-value {
+      font-size: 1.1rem;
+      font-weight: bold;
     }
   </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs/5.57.1/babylon.min.js"></script>
 </head>
 <body>
-  <!-- Babylon Viewer -->
-  <babylon-viewer id="babylonViewer"
-    source="https://assets.babylonjs.com/meshes/Demos/optimized/acrobaticPlane_variants.glb"
-    camera-behaviors="autoRotate"
-    camera-auto-rotate-speed="0"
-    camera-orbit="0 1.5 10"
-    camera-target="0 1 0"
-    shadow-quality="medium"
-  ></babylon-viewer>
-
-  <!-- Overlay Info -->
-  <div class="overlay" id="status">Connecting to server...</div>
+  <canvas id="babylonCanvas"></canvas>
+  
+  <div class="ui-overlay">
+    <div id="status" class="status waiting">Connecting to server...</div>
+    
+    <div class="data-panel">
+      <div class="data-item" id="alphaItem">
+        <div class="data-label">Alpha (Z)</div>
+        <div class="data-value" id="alphaValue">--</div>
+      </div>
+      <div class="data-item" id="betaItem">
+        <div class="data-label">Beta (X)</div>
+        <div class="data-value" id="betaValue">--</div>
+      </div>
+      <div class="data-item" id="gammaItem">
+        <div class="data-label">Gamma (Y)</div>
+        <div class="data-value" id="gammaValue">--</div>
+      </div>
+    </div>
+  </div>
 
   <script>
     let socket;
-    let viewer;
     let lastUpdate = 0;
+    let scene, engine, camera, mesh;
+    let currentRotation = { alpha: 0, beta: 0, gamma: 0 };
 
-    function updateStatus(msg) {
-      document.getElementById("status").textContent = msg;
+    // Initialize Babylon.js
+    function initBabylon() {
+      const canvas = document.getElementById('babylonCanvas');
+      engine = new BABYLON.Engine(canvas, true);
+      
+      scene = new BABYLON.Scene(engine);
+      scene.clearColor = new BABYLON.Color3(0.05, 0.05, 0.1);
+      
+      // Create camera
+      camera = new BABYLON.ArcRotateCamera(
+        "camera", 
+        -Math.PI / 2, 
+        Math.PI / 2.5, 
+        10, 
+        BABYLON.Vector3.Zero(), 
+        scene
+      );
+      camera.attachControls(canvas, true);
+      
+      // Create lighting
+      const hemisphericLight = new BABYLON.HemisphericLight(
+        "hemisphericLight", 
+        new BABYLON.Vector3(0, 1, 0), 
+        scene
+      );
+      hemisphericLight.intensity = 0.7;
+      
+      const directionalLight = new BABYLON.DirectionalLight(
+        "directionalLight", 
+        new BABYLON.Vector3(0, -1, 0), 
+        scene
+      );
+      directionalLight.intensity = 0.5;
+      directionalLight.position = new BABYLON.Vector3(0, 10, 0);
+      
+      // Create a colorful box as our gyroscope object
+      mesh = BABYLON.MeshBuilder.CreateBox("gyroBox", {size: 3}, scene);
+      
+      // Create a multi-colored material
+      const material = new BABYLON.StandardMaterial("gyroMaterial", scene);
+      material.diffuseColor = new BABYLON.Color3(1, 0.5, 0.2);
+      material.specularColor = new BABYLON.Color3(0.5, 0.5, 0.5);
+      material.emissiveColor = new BABYLON.Color3(0.1, 0.1, 0.2);
+      mesh.material = material;
+      
+      // Add wireframe overlay for better visualization
+      const wireframe = mesh.clone("wireframe");
+      wireframe.material = new BABYLON.StandardMaterial("wireframeMaterial", scene);
+      wireframe.material.wireframe = true;
+      wireframe.material.emissiveColor = new BABYLON.Color3(0.3, 0.8, 1);
+      wireframe.scaling = new BABYLON.Vector3(1.01, 1.01, 1.01);
+      
+      // Render loop
+      engine.runRenderLoop(() => {
+        scene.render();
+      });
+      
+      // Handle window resize
+      window.addEventListener('resize', () => {
+        engine.resize();
+      });
     }
 
-    // Wait until viewer is loaded
-    window.addEventListener("DOMContentLoaded", () => {
-      viewer = document.getElementById("babylonViewer");
+    function updateStatus(message, type) {
+      const statusEl = document.getElementById('status');
+      statusEl.textContent = message;
+      statusEl.className = `status ${type}`;
+    }
 
-      // Connect WebSocket
-      connectWebSocket();
-    });
+    function updateGyroData(data) {
+      // Update display values
+      document.getElementById('alphaValue').textContent = 
+        data.alpha ? data.alpha.toFixed(1) + '°' : '--';
+      document.getElementById('betaValue').textContent = 
+        data.beta ? data.beta.toFixed(1) + '°' : '--';
+      document.getElementById('gammaValue').textContent = 
+        data.gamma ? data.gamma.toFixed(1) + '°' : '--';
+
+      // Visual feedback for active data
+      ['alphaItem', 'betaItem', 'gammaItem'].forEach(id => {
+        document.getElementById(id).classList.remove('active');
+      });
+      
+      setTimeout(() => {
+        if (Math.abs(data.alpha) > 1) document.getElementById('alphaItem').classList.add('active');
+        if (Math.abs(data.beta) > 1) document.getElementById('betaItem').classList.add('active');
+        if (Math.abs(data.gamma) > 1) document.getElementById('gammaItem').classList.add('active');
+      }, 50);
+
+      // Update 3D object
+      if (mesh && data.alpha !== null && data.beta !== null && data.gamma !== null) {
+        updateMeshRotation(data.alpha, data.beta, data.gamma);
+        updateMeshColor(data.alpha, data.beta, data.gamma);
+      }
+
+      lastUpdate = Date.now();
+    }
+
+    function updateMeshRotation(alpha, beta, gamma) {
+      if (!mesh) return;
+      
+      // Convert degrees to radians and apply rotations
+      // Alpha: rotation around Z-axis (yaw)
+      // Beta: rotation around X-axis (pitch)  
+      // Gamma: rotation around Y-axis (roll)
+      
+      const alphaRad = (alpha * Math.PI) / 180;
+      const betaRad = (beta * Math.PI) / 180;
+      const gammaRad = (gamma * Math.PI) / 180;
+      
+      // Apply rotations smoothly
+      mesh.rotation.x = betaRad;
+      mesh.rotation.y = gammaRad;
+      mesh.rotation.z = alphaRad;
+      
+      // Store current rotation for reference
+      currentRotation = { alpha, beta, gamma };
+    }
+
+    function updateMeshColor(alpha, beta, gamma) {
+      if (!mesh || !mesh.material) return;
+      
+      // Map gyroscope values to color components
+      // Alpha (0-360) -> Red component
+      const red = Math.abs(Math.sin((alpha * Math.PI) / 180));
+      
+      // Beta (-180 to 180) -> Green component  
+      const green = (beta + 180) / 360;
+      
+      // Gamma (-90 to 90) -> Blue component
+      const blue = (gamma + 90) / 180;
+      
+      mesh.material.diffuseColor = new BABYLON.Color3(red, green, blue);
+      
+      // Update emissive color for glow effect
+      mesh.material.emissiveColor = new BABYLON.Color3(red * 0.3, green * 0.3, blue * 0.3);
+    }
 
     function connectWebSocket() {
-      updateStatus("Connecting to server...");
+      updateStatus('Connecting to server...', 'waiting');
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${protocol}//${location.host}`;
-
+      
       socket = new WebSocket(wsUrl);
 
       socket.onopen = () => {
         socket.send(JSON.stringify({ type: "viewer" }));
-        updateStatus("Connected - Awaiting gyro data...");
+        updateStatus('Connected - Waiting for gyroscope data...', 'connected');
       };
 
       socket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
           if (data.type === "gyro") {
-            applyGyroToCamera(data);
-            updateStatus("Receiving gyroscope data...");
+            updateGyroData(data);
+            updateStatus('Receiving gyroscope data', 'connected');
           }
         } catch (e) {
           console.error("Error parsing message:", e);
@@ -73,39 +278,28 @@
       };
 
       socket.onclose = () => {
-        updateStatus("Disconnected. Retrying...");
+        updateStatus('Disconnected from server', 'disconnected');
         setTimeout(connectWebSocket, 3000);
       };
 
-      socket.onerror = (err) => {
-        console.error("WebSocket error:", err);
-        updateStatus("Connection error");
+      socket.onerror = (error) => {
+        console.error("WebSocket error:", error);
+        updateStatus('Connection error', 'disconnected');
       };
     }
 
-    function applyGyroToCamera({ alpha, beta, gamma }) {
-      lastUpdate = Date.now();
-
-      if (!viewer || !viewer.sceneManager || !viewer.sceneManager.activeCamera) return;
-      const camera = viewer.sceneManager.activeCamera;
-
-      // Convert degrees to radians
-      const toRad = deg => deg * Math.PI / 180;
-
-      // Adjust angles as needed based on your preferred mapping
-      const azimuthal = toRad(alpha || 0); // around Y
-      const polar = toRad(90 - (beta || 0)); // up/down
-
-      camera.alpha = azimuthal;  // horizontal orbit
-      camera.beta = Math.max(0.1, Math.min(Math.PI - 0.1, polar)); // vertical tilt, clamp to avoid flipping
-    }
-
-    // Fallback if data gets stale
+    // Check for stale data
     setInterval(() => {
-      if (lastUpdate && (Date.now() - lastUpdate > 5000)) {
-        updateStatus("No recent gyro data");
+      if (lastUpdate && (Date.now() - lastUpdate) > 5000) {
+        updateStatus('No recent data received', 'waiting');
       }
     }, 1000);
+
+    // Initialize everything when page loads
+    window.addEventListener('DOMContentLoaded', () => {
+      initBabylon();
+      connectWebSocket();
+    });
   </script>
 </body>
 </html>
