@@ -1,215 +1,281 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Gyro Viewer</title>
+  <title>Gyro Connector</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body { 
       font-family: sans-serif; 
       padding: 2rem; 
       text-align: center; 
-      background: #000000;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      min-height: 100vh;
+      margin: 0;
     }
     .container {
-      max-width: 800px;
+      max-width: 400px;
       margin: 0 auto;
-      background: linear-gradient(135deg, #ffffff, #ffffff); 
+      background: rgba(255,255,255,0.1);
       padding: 2rem;
-      border-radius: 10px;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      border-radius: 15px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
     }
-    .data-grid {
+    button { 
+      padding: 1rem 2rem; 
+      font-size: 1.2rem; 
+      border: none;
+      border-radius: 25px;
+      background: #ff6b6b;
+      color: white;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+    button:hover:not(:disabled) {
+      background: #ff5252;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .status { 
+      margin: 1rem 0; 
+      font-weight: bold; 
+      padding: 1rem;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.1);
+      backdrop-filter: blur(5px);
+    }
+    .status.success {
+      background: rgba(76, 175, 80, 0.3);
+      border: 1px solid rgba(76, 175, 80, 0.5);
+    }
+    .status.error {
+      background: rgba(244, 67, 54, 0.3);
+      border: 1px solid rgba(244, 67, 54, 0.5);
+    }
+    .status.warning {
+      background: rgba(255, 193, 7, 0.3);
+      border: 1px solid rgba(255, 193, 7, 0.5);
+    }
+    .data-display {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      grid-template-columns: 1fr 1fr 1fr;
       gap: 1rem;
       margin: 2rem 0;
     }
-    .data-card {
-      background: #f8f9fa;
-      border: 2px solid #e9ecef;
-      border-radius: 8px;
-      padding: 1.5rem;
-      transition: all 0.3s ease;
-    }
-    .data-card.active {
-      border-color: #007bff;
-      background: #e7f3ff;
+    .data-item {
+      background: rgba(255,255,255,0.1);
+      padding: 1rem;
+      border-radius: 10px;
+      backdrop-filter: blur(5px);
     }
     .data-label {
-      font-size: 0.9rem;
-      color: #666;
+      font-size: 0.8rem;
+      opacity: 0.8;
       margin-bottom: 0.5rem;
     }
     .data-value {
-      font-size: 2rem;
-      font-weight: bold;
-      color: #333;
-    }
-    .status {
-      margin: 1rem 0;
-      padding: 1rem;
-      border-radius: 5px;
+      font-size: 1.2rem;
       font-weight: bold;
     }
-    .status.connected {
-      background: #000000;
-      color: #ffffff;
-      border: 5px solid #01ff3c;
+    .connection-indicator {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 0.5rem;
+      background: #ccc;
     }
-    .status.disconnected {
-      background: #000000;
-      color: #ffffff;
-      border: 5px solid #f40018;
+    .connection-indicator.connected {
+      background: #4caf50;
+      animation: pulse 2s infinite;
     }
-    .status.waiting {
-      background: #000000;
-      color: #ffffff;
-      border: 10px solid #ffc400;
-    }
-    .visualizer {
-      width: 100%;
-      height: 200px;
-      margin: 2rem auto;
-      border: 2px solid #ddd;
-      border-radius: 10px;
-      transition: background 0.2s ease;
-      background: black;
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.5; }
+      100% { opacity: 1; }
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Gyroscope Data Viewer</h1>
-    <div id="status" class="status waiting">Connecting to server...</div>
+    <h1>Gyroscope Connector</h1>
+    <button id="startButton">Enable Gyroscope</button>
+    <div id="status" class="status">Waiting for user interaction...</div>
     
-    <div class="data-grid">
-      <div class="data-card" id="alphaCard">
-        <div class="data-label">Alpha (Z-axis)</div>
-        <div class="data-value" id="alphaValue">--</div>
-        <div style="font-size: 0.8rem; color: #666;">Rotation around Z</div>
+    <div class="connection-indicator" id="connectionIndicator"></div>
+    <span id="connectionStatus">Disconnected</span>
+
+    <div class="data-display" id="dataDisplay" style="display: none;">
+      <div class="data-item">
+        <div class="data-label">Alpha</div>
+        <div class="data-value" id="alphaDisplay">--</div>
       </div>
-      <div class="data-card" id="betaCard">
-        <div class="data-label">Beta (X-axis)</div>
-        <div class="data-value" id="betaValue">--</div>
-        <div style="font-size: 0.8rem; color: #666;">Front/Back tilt</div>
+      <div class="data-item">
+        <div class="data-label">Beta</div>
+        <div class="data-value" id="betaDisplay">--</div>
       </div>
-      <div class="data-card" id="gammaCard">
-        <div class="data-label">Gamma (Y-axis)</div>
-        <div class="data-value" id="gammaValue">--</div>
-        <div style="font-size: 0.8rem; color: #666;">Left/Right tilt</div>
+      <div class="data-item">
+        <div class="data-label">Gamma</div>
+        <div class="data-value" id="gammaDisplay">--</div>
       </div>
     </div>
-
-    <div class="visualizer" id="visualizer"></div>
   </div>
-   <babylon-viewer
-      source="https://assets.babylonjs.com/meshes/Demos/optimized/acrobaticPlane_variants.glb"
-      camera-orbit="2.096 1.260 0.456"
-      camera-target="-0.008 0.153 -0.004"
-      shadow-quality="normal"
-    >
-    </babylon-viewer>
-  <script
-      type="module"
-      src="https://cdn.jsdelivr.net/npm/@babylonjs/viewer@8.9.1/dist/babylon-viewer.esm.min.js"
-    ></script>
 
   <script>
     let socket;
-    let lastUpdate = 0;
+    let isStreaming = false;
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 5;
 
-    function updateStatus(message, type) {
+    function updateStatus(message, type = '') {
       const statusEl = document.getElementById('status');
       statusEl.textContent = message;
       statusEl.className = `status ${type}`;
     }
 
-    function updateGyroData(data) {
-      // Update values
-      document.getElementById('alphaValue').textContent = 
-        data.alpha ? data.alpha.toFixed(1) + '°' : '--';
-      document.getElementById('betaValue').textContent = 
-        data.beta ? data.beta.toFixed(1) + '°' : '--';
-      document.getElementById('gammaValue').textContent = 
-        data.gamma ? data.gamma.toFixed(1) + '°' : '--';
-
-      // Visual feedback for active data
-      ['alphaCard', 'betaCard', 'gammaCard'].forEach(id => {
-        document.getElementById(id).classList.remove('active');
-      });
+    function updateConnectionStatus(connected) {
+      const indicator = document.getElementById('connectionIndicator');
+      const status = document.getElementById('connectionStatus');
       
-      setTimeout(() => {
-        if (Math.abs(data.alpha) > 1) document.getElementById('alphaCard').classList.add('active');
-        if (Math.abs(data.beta) > 1) document.getElementById('betaCard').classList.add('active');
-        if (Math.abs(data.gamma) > 1) document.getElementById('gammaCard').classList.add('active');
-      }, 50);
-
-      updateVisualizer(data.beta, data.gamma, data.alpha);
-      lastUpdate = Date.now();
+      if (connected) {
+        indicator.classList.add('connected');
+        status.textContent = 'Connected';
+      } else {
+        indicator.classList.remove('connected');
+        status.textContent = 'Disconnected';
+      }
     }
 
-    function updateVisualizer(beta, gamma, alpha) {
-      const visualizer = document.getElementById('visualizer');
+    function sendGyro(alpha, beta, gamma) {
+      //first check if data exisits
+      if (alpha === null || beta === null || gamma === null) {
+        return;
+      }
+      //clean up data
+      const data = {
+        type: "gyro",
+        alpha: Math.round(alpha * 10) / 10, 
+        beta: Math.round(beta * 10) / 10,
+        gamma: Math.round(gamma * 10) / 10,
+        timestamp: Date.now()
+      };
 
-      // Gamma (Y-axis): -90 to 90 -> Hue (0 to 360)
-      const hue = ((gamma + 90) / 180) * 360;
+      // update display
+      document.getElementById('alphaDisplay').textContent = data.alpha.toFixed(1) + '°';
+      document.getElementById('betaDisplay').textContent = data.beta.toFixed(1) + '°';
+      document.getElementById('gammaDisplay').textContent = data.gamma.toFixed(1) + '°';
 
-      // Beta (X-axis): -180 to 180 -> Brightness (50% to 100%)
-      const brightness = 50 + ((beta + 180) / 360) * 50;
-
-      // Alpha (Z-axis): Use texture if rotated past 90 degrees
-      const isStriped = Math.abs(alpha % 360) > 90;
-
-      const background = isStriped
-        ? `repeating-linear-gradient(45deg, hsl(${hue}, 100%, ${brightness}%) 0px, hsl(${hue}, 100%, ${brightness}%) 10px, black 10px, black 20px)`
-        : `hsl(${hue}, 100%, ${brightness}%)`;
-
-      visualizer.style.background = background;
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify(data));
+      }
     }
 
     function connectWebSocket() {
-      updateStatus('Connecting to server...', 'waiting');
+      if (socket && socket.readyState === WebSocket.CONNECTING) {
+        return; // checks if already connected
+      }
+
+      updateStatus(`Connecting to server... (Attempt ${reconnectAttempts + 1})`, 'warning');
+      
+      //ensure communication is over wss
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${protocol}//${location.host}`;
       
       socket = new WebSocket(wsUrl);
 
       socket.onopen = () => {
-        socket.send(JSON.stringify({ type: "viewer" }));
-        updateStatus('Connected - Waiting for gyroscope data...', 'connected');
-      };
-
-      socket.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === "gyro") {
-            updateGyroData(data);
-            updateStatus('Receiving gyroscope data', 'connected');
-          }
-        } catch (e) {
-          console.error("Error parsing message:", e);
+        socket.send(JSON.stringify({ type: "sender" }));
+        updateConnectionStatus(true);
+        updateStatus("Connected to server", 'success');
+        reconnectAttempts = 0;
+        
+        if (isStreaming) {
+          updateStatus("Streaming gyroscope data...", 'success');
         }
       };
 
       socket.onclose = () => {
-        updateStatus('Disconnected from server', 'disconnected');
-        setTimeout(connectWebSocket, 3000);
+        updateConnectionStatus(false);
+        
+        if (reconnectAttempts < maxReconnectAttempts) {
+          reconnectAttempts++;
+          updateStatus(`Connection lost. Reconnecting in 3 seconds... (${reconnectAttempts}/${maxReconnectAttempts})`, 'warning');
+          setTimeout(connectWebSocket, 3000);
+        } else {
+          updateStatus("Connection failed. Please refresh the page.", 'error');
+        }
       };
 
       socket.onerror = (error) => {
         console.error("WebSocket error:", error);
-        updateStatus('Connection error', 'disconnected');
+        updateStatus("Connection error occurred", 'error');
       };
     }
 
-    // Check for stale data
-    setInterval(() => {
-      if (lastUpdate && (Date.now() - lastUpdate) > 5000) {
-        updateStatus('No recent data received', 'waiting');
-      }
-    }, 1000);
+    function setupSocketAndStartSensor() {
+      const startButton = document.getElementById('startButton');
+      startButton.disabled = true;
+      startButton.textContent = 'Enabling...';
 
-    connectWebSocket();
+      connectWebSocket();
+
+      const enableSensor = () => {
+        window.addEventListener("deviceorientation", (e) => {
+          sendGyro(e.alpha, e.beta, e.gamma);
+        });
+        
+        isStreaming = true;
+        document.getElementById('dataDisplay').style.display = 'grid';
+        updateStatus("Streaming gyroscope data...", 'success');
+        startButton.textContent = 'Gyroscope Active';
+        startButton.style.background = '#4caf50';
+      };
+
+      if (!window.DeviceOrientationEvent) {
+        updateStatus("Device orientation not supported on this device", 'error');
+        startButton.disabled = false;
+        startButton.textContent = 'Not Supported';
+        return;
+      }
+
+      if (typeof DeviceOrientationEvent?.requestPermission === "function") {
+        DeviceOrientationEvent.requestPermission()
+          .then(permission => {
+            if (permission === "granted") {
+              enableSensor();
+            } else {
+              updateStatus("Permission denied for device orientation", 'error');
+              startButton.disabled = false;
+              startButton.textContent = 'Permission Denied';
+            }
+          })
+          .catch((err) => {
+            console.error("Permission error:", err);
+            updateStatus("Error requesting permission: " + err.message, 'error');
+            startButton.disabled = false;
+            startButton.textContent = 'Error';
+          });
+      } else {
+        enableSensor();
+      }
+    }
+    //when clicked set up socket connection
+    document.getElementById("startButton").addEventListener("click", setupSocketAndStartSensor);
+
+    window.addEventListener('load', () => {
+      if (!window.DeviceOrientationEvent) {
+        updateStatus("Device orientation not supported on this device", 'error');
+        document.getElementById('startButton').disabled = true;
+        document.getElementById('startButton').textContent = 'Not Supported';
+      }
+    });
   </script>
 </body>
 </html>
