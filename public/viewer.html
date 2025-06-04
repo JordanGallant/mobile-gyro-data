@@ -1,112 +1,106 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Babylon.js Gyro Viewer</title>
+  <title>Gyro Viewer</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    html, body { 
-      width: 100%; 
-      height: 100%; 
-      padding: 0; 
-      margin: 0; 
-      overflow: hidden; 
-      font-family: sans-serif;
+    body { 
+      font-family: sans-serif; 
+      padding: 2rem; 
+      text-align: center; 
       background: #000000;
     }
-    
-    #babylonCanvas {
-      width: 100%;
-      height: 100%;
-      display: block;
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: linear-gradient(135deg, #ffffff, #ffffff); 
+      padding: 2rem;
+      border-radius: 10px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
-    
-    .ui-overlay {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      z-index: 100;
-      pointer-events: none;
+    .data-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin: 2rem 0;
     }
-    
-    .status {
-      padding: 12px 20px;
+    .data-card {
+      background: #f8f9fa;
+      border: 2px solid #e9ecef;
       border-radius: 8px;
-      font-weight: bold;
-      margin-bottom: 10px;
-      backdrop-filter: blur(10px);
-      border: 2px solid;
+      padding: 1.5rem;
+      transition: all 0.3s ease;
     }
-    
-    .status.connected {
-      background: rgba(0, 0, 0, 0.8);
-      color: #ffffff;
-      border-color: #01ff3c;
-    }
-    
-    .status.disconnected {
-      background: rgba(0, 0, 0, 0.8);
-      color: #ffffff;
-      border-color: #f40018;
-    }
-    
-    .status.waiting {
-      background: rgba(0, 0, 0, 0.8);
-      color: #ffffff;
-      border-color: #ffc400;
-    }
-    
-    .data-panel {
-      display: flex;
-      gap: 15px;
-    }
-    
-    .data-item {
-      background: rgba(0, 0, 0, 0.7);
-      padding: 10px 15px;
-      border-radius: 6px;
-      color: white;
-      backdrop-filter: blur(5px);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      transition: border-color 0.3s ease;
-    }
-    
-    .data-item.active {
+    .data-card.active {
       border-color: #007bff;
+      background: #e7f3ff;
     }
-    
     .data-label {
-      font-size: 0.8rem;
-      opacity: 0.8;
-      margin-bottom: 2px;
+      font-size: 0.9rem;
+      color: #666;
+      margin-bottom: 0.5rem;
     }
-    
     .data-value {
-      font-size: 1.1rem;
+      font-size: 2rem;
       font-weight: bold;
+      color: #333;
+    }
+    .status {
+      margin: 1rem 0;
+      padding: 1rem;
+      border-radius: 5px;
+      font-weight: bold;
+    }
+    .status.connected {
+      background: #000000;
+      color: #ffffff;
+      border: 5px solid #01ff3c;
+    }
+    .status.disconnected {
+      background: #000000;
+      color: #ffffff;
+      border: 5px solid #f40018;
+    }
+    .status.waiting {
+      background: #000000;
+      color: #ffffff;
+      border: 10px solid #ffc400;
+    }
+    .visualizer {
+      width: 100%;
+      height: 200px;
+      margin: 2rem auto;
+      border: 2px solid #ddd;
+      border-radius: 10px;
+      transition: background 0.2s ease;
+      background: black;
     }
   </style>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs/5.57.1/babylon.min.js"></script>
 </head>
 <body>
-  <canvas id="babylonCanvas"></canvas>
-  
-  <div class="ui-overlay">
+  <div class="container">
+    <h1>Gyroscope Data Viewer</h1>
     <div id="status" class="status waiting">Connecting to server...</div>
     
-    <div class="data-panel">
-      <div class="data-item" id="alphaItem">
-        <div class="data-label">Alpha (Z)</div>
+    <div class="data-grid">
+      <div class="data-card" id="alphaCard">
+        <div class="data-label">Alpha (Z-axis)</div>
         <div class="data-value" id="alphaValue">--</div>
+        <div style="font-size: 0.8rem; color: #666;">Rotation around Z</div>
       </div>
-      <div class="data-item" id="betaItem">
-        <div class="data-label">Beta (X)</div>
+      <div class="data-card" id="betaCard">
+        <div class="data-label">Beta (X-axis)</div>
         <div class="data-value" id="betaValue">--</div>
+        <div style="font-size: 0.8rem; color: #666;">Front/Back tilt</div>
       </div>
-      <div class="data-item" id="gammaItem">
-        <div class="data-label">Gamma (Y)</div>
+      <div class="data-card" id="gammaCard">
+        <div class="data-label">Gamma (Y-axis)</div>
         <div class="data-value" id="gammaValue">--</div>
+        <div style="font-size: 0.8rem; color: #666;">Left/Right tilt</div>
       </div>
     </div>
+
+    <div class="visualizer" id="visualizer"></div>
   </div>
    <babylon-viewer
       source="https://assets.babylonjs.com/meshes/Demos/optimized/acrobaticPlane_variants.glb"
@@ -123,71 +117,6 @@
   <script>
     let socket;
     let lastUpdate = 0;
-    let scene, engine, camera, mesh;
-    let currentRotation = { alpha: 0, beta: 0, gamma: 0 };
-
-    // Initialize Babylon.js
-    function initBabylon() {
-      const canvas = document.getElementById('babylonCanvas');
-      engine = new BABYLON.Engine(canvas, true);
-      
-      scene = new BABYLON.Scene(engine);
-      scene.clearColor = new BABYLON.Color3(0.05, 0.05, 0.1);
-      
-      // Create camera
-      camera = new BABYLON.ArcRotateCamera(
-        "camera", 
-        -Math.PI / 2, 
-        Math.PI / 2.5, 
-        10, 
-        BABYLON.Vector3.Zero(), 
-        scene
-      );
-      camera.attachControls(canvas, true);
-      
-      // Create lighting
-      const hemisphericLight = new BABYLON.HemisphericLight(
-        "hemisphericLight", 
-        new BABYLON.Vector3(0, 1, 0), 
-        scene
-      );
-      hemisphericLight.intensity = 0.7;
-      
-      const directionalLight = new BABYLON.DirectionalLight(
-        "directionalLight", 
-        new BABYLON.Vector3(0, -1, 0), 
-        scene
-      );
-      directionalLight.intensity = 0.5;
-      directionalLight.position = new BABYLON.Vector3(0, 10, 0);
-      
-      // Create a colorful box as our gyroscope object
-      mesh = BABYLON.MeshBuilder.CreateBox("gyroBox", {size: 3}, scene);
-      
-      // Create a multi-colored material
-      const material = new BABYLON.StandardMaterial("gyroMaterial", scene);
-      material.diffuseColor = new BABYLON.Color3(1, 0.5, 0.2);
-      material.specularColor = new BABYLON.Color3(0.5, 0.5, 0.5);
-      material.emissiveColor = new BABYLON.Color3(0.1, 0.1, 0.2);
-      mesh.material = material;
-      
-      // Add wireframe overlay for better visualization
-      const wireframe = mesh.clone("wireframe");
-      wireframe.material = new BABYLON.StandardMaterial("wireframeMaterial", scene);
-      wireframe.material.wireframe = true;
-      wireframe.material.emissiveColor = new BABYLON.Color3(0.3, 0.8, 1);
-      wireframe.scaling = new BABYLON.Vector3(1.01, 1.01, 1.01);
-      
-      // Render loop
-      engine.runRenderLoop(() => {
-        scene.render();
-      });
-      
-      // Handle window resize
-      window.addEventListener('resize', () => {
-        engine.resize();
-      });
-    }
 
     function updateStatus(message, type) {
       const statusEl = document.getElementById('status');
@@ -196,7 +125,7 @@
     }
 
     function updateGyroData(data) {
-      // Update display values
+      // Update values
       document.getElementById('alphaValue').textContent = 
         data.alpha ? data.alpha.toFixed(1) + '°' : '--';
       document.getElementById('betaValue').textContent = 
@@ -205,63 +134,37 @@
         data.gamma ? data.gamma.toFixed(1) + '°' : '--';
 
       // Visual feedback for active data
-      ['alphaItem', 'betaItem', 'gammaItem'].forEach(id => {
+      ['alphaCard', 'betaCard', 'gammaCard'].forEach(id => {
         document.getElementById(id).classList.remove('active');
       });
       
       setTimeout(() => {
-        if (Math.abs(data.alpha) > 1) document.getElementById('alphaItem').classList.add('active');
-        if (Math.abs(data.beta) > 1) document.getElementById('betaItem').classList.add('active');
-        if (Math.abs(data.gamma) > 1) document.getElementById('gammaItem').classList.add('active');
+        if (Math.abs(data.alpha) > 1) document.getElementById('alphaCard').classList.add('active');
+        if (Math.abs(data.beta) > 1) document.getElementById('betaCard').classList.add('active');
+        if (Math.abs(data.gamma) > 1) document.getElementById('gammaCard').classList.add('active');
       }, 50);
 
-      // Update 3D object
-      if (mesh && data.alpha !== null && data.beta !== null && data.gamma !== null) {
-        updateMeshRotation(data.alpha, data.beta, data.gamma);
-        updateMeshColor(data.alpha, data.beta, data.gamma);
-      }
-
+      updateVisualizer(data.beta, data.gamma, data.alpha);
       lastUpdate = Date.now();
     }
 
-    function updateMeshRotation(alpha, beta, gamma) {
-      if (!mesh) return;
-      
-      // Convert degrees to radians and apply rotations
-      // Alpha: rotation around Z-axis (yaw)
-      // Beta: rotation around X-axis (pitch)  
-      // Gamma: rotation around Y-axis (roll)
-      
-      const alphaRad = (alpha * Math.PI) / 180;
-      const betaRad = (beta * Math.PI) / 180;
-      const gammaRad = (gamma * Math.PI) / 180;
-      
-      // Apply rotations smoothly
-      mesh.rotation.x = betaRad;
-      mesh.rotation.y = gammaRad;
-      mesh.rotation.z = alphaRad;
-      
-      // Store current rotation for reference
-      currentRotation = { alpha, beta, gamma };
-    }
+    function updateVisualizer(beta, gamma, alpha) {
+      const visualizer = document.getElementById('visualizer');
 
-    function updateMeshColor(alpha, beta, gamma) {
-      if (!mesh || !mesh.material) return;
-      
-      // Map gyroscope values to color components
-      // Alpha (0-360) -> Red component
-      const red = Math.abs(Math.sin((alpha * Math.PI) / 180));
-      
-      // Beta (-180 to 180) -> Green component  
-      const green = (beta + 180) / 360;
-      
-      // Gamma (-90 to 90) -> Blue component
-      const blue = (gamma + 90) / 180;
-      
-      mesh.material.diffuseColor = new BABYLON.Color3(red, green, blue);
-      
-      // Update emissive color for glow effect
-      mesh.material.emissiveColor = new BABYLON.Color3(red * 0.3, green * 0.3, blue * 0.3);
+      // Gamma (Y-axis): -90 to 90 -> Hue (0 to 360)
+      const hue = ((gamma + 90) / 180) * 360;
+
+      // Beta (X-axis): -180 to 180 -> Brightness (50% to 100%)
+      const brightness = 50 + ((beta + 180) / 360) * 50;
+
+      // Alpha (Z-axis): Use texture if rotated past 90 degrees
+      const isStriped = Math.abs(alpha % 360) > 90;
+
+      const background = isStriped
+        ? `repeating-linear-gradient(45deg, hsl(${hue}, 100%, ${brightness}%) 0px, hsl(${hue}, 100%, ${brightness}%) 10px, black 10px, black 20px)`
+        : `hsl(${hue}, 100%, ${brightness}%)`;
+
+      visualizer.style.background = background;
     }
 
     function connectWebSocket() {
@@ -306,11 +209,7 @@
       }
     }, 1000);
 
-    // Initialize everything when page loads
-    window.addEventListener('DOMContentLoaded', () => {
-      initBabylon();
-      connectWebSocket();
-    });
+    connectWebSocket();
   </script>
 </body>
 </html>
