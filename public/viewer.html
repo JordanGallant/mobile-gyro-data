@@ -75,6 +75,18 @@
       transition: background 0.2s ease;
       background: black;
     }
+    .babylon-container {
+      width: 100%;
+      height: 400px;
+      margin: 2rem auto;
+      border: 2px solid #ddd;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    babylon-viewer {
+      width: 100%;
+      height: 100%;
+    }
   </style>
 </head>
 <body>
@@ -101,14 +113,19 @@
     </div>
 
     <div class="visualizer" id="visualizer"></div>
+    
+    <div class="babylon-container">
+      <babylon-viewer
+        id="babylonViewer"
+        source="https://assets.babylonjs.com/meshes/Demos/optimized/acrobaticPlane_variants.glb"
+        camera-orbit="2.096 1.260 0.456"
+        camera-target="-0.008 0.153 -0.004"
+        shadow-quality="normal"
+      >
+      </babylon-viewer>
+    </div>
   </div>
-   <babylon-viewer
-      source="https://assets.babylonjs.com/meshes/Demos/optimized/acrobaticPlane_variants.glb"
-      camera-orbit="2.096 1.260 0.456"
-      camera-target="-0.008 0.153 -0.004"
-      shadow-quality="normal"
-    >
-    </babylon-viewer>
+
   <script
       type="module"
       src="https://cdn.jsdelivr.net/npm/@babylonjs/viewer@8.9.1/dist/babylon-viewer.esm.min.js"
@@ -117,11 +134,41 @@
   <script>
     let socket;
     let lastUpdate = 0;
+    let babylonViewer;
+
+    // Initialize Babylon viewer reference
+    window.addEventListener('DOMContentLoaded', () => {
+      babylonViewer = document.getElementById('babylonViewer');
+    });
 
     function updateStatus(message, type) {
       const statusEl = document.getElementById('status');
       statusEl.textContent = message;
       statusEl.className = `status ${type}`;
+    }
+
+    function updateCameraOrbit(alpha, beta, gamma) {
+      if (!babylonViewer) return;
+      
+      // Convert gyroscope values to camera orbit parameters
+      // Scale down the values for smoother camera movement
+      const scaleFactor = 0.01; // Adjust this to control sensitivity
+      
+      // Base camera position
+      const baseOrbit = [2.096, 1.260, 0.456];
+      
+      // Apply gyroscope data to camera orbit
+      // Alpha (Z-rotation) affects the azimuth (first parameter)
+      // Beta (X-tilt) affects the polar angle (second parameter) 
+      // Gamma (Y-tilt) affects the radius (third parameter)
+      const newOrbit = [
+        baseOrbit[0] + (alpha * scaleFactor),           // Azimuth
+        Math.max(0.1, baseOrbit[1] + (beta * scaleFactor)), // Polar (clamped to prevent flipping)
+        Math.max(0.2, baseOrbit[2] + (gamma * scaleFactor * 0.5)) // Radius (clamped to prevent getting too close)
+      ];
+      
+      // Update camera orbit
+      babylonViewer.setAttribute('camera-orbit', newOrbit.join(' '));
     }
 
     function updateGyroData(data) {
@@ -145,6 +192,10 @@
       }, 50);
 
       updateVisualizer(data.beta, data.gamma, data.alpha);
+      
+      // Update 3D camera based on gyroscope data
+      updateCameraOrbit(data.alpha || 0, data.beta || 0, data.gamma || 0);
+      
       lastUpdate = Date.now();
     }
 
