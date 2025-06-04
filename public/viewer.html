@@ -1,179 +1,71 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Gyro Viewer</title>
+  <title>Gyro Camera Control</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@babylonjs/viewer@8.9.1/dist/babylon-viewer.esm.min.js"></script>
   <style>
-    body { 
-      font-family: sans-serif; 
-      padding: 2rem; 
-      text-align: center; 
-      background: #000000;
-    }
-    .container {
-      max-width: 800px;
-      margin: 0 auto;
-      background: linear-gradient(135deg, #ffffff, #ffffff); 
-      padding: 2rem;
-      border-radius: 10px;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-    .data-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 1rem;
-      margin: 2rem 0;
-    }
-    .data-card {
-      background: #f8f9fa;
-      border: 2px solid #e9ecef;
-      border-radius: 8px;
-      padding: 1.5rem;
-      transition: all 0.3s ease;
-    }
-    .data-card.active {
-      border-color: #007bff;
-      background: #e7f3ff;
-    }
-    .data-label {
-      font-size: 0.9rem;
-      color: #666;
-      margin-bottom: 0.5rem;
-    }
-    .data-value {
-      font-size: 2rem;
-      font-weight: bold;
-      color: #333;
-    }
-    .status {
-      margin: 1rem 0;
+    html, body { width: 100%; height: 100%; padding: 0; margin: 0; overflow: hidden; background: #000; color: #fff; font-family: sans-serif; }
+    .overlay {
+      position: absolute;
+      top: 1rem;
+      left: 1rem;
+      background: rgba(0,0,0,0.5);
       padding: 1rem;
-      border-radius: 5px;
-      font-weight: bold;
-    }
-    .status.connected {
-      background: #000000;
-      color: #ffffff;
-      border: 5px solid #01ff3c;
-    }
-    .status.disconnected {
-      background: #000000;
-      color: #ffffff;
-      border: 5px solid #f40018;
-    }
-    .status.waiting {
-      background: #000000;
-      color: #ffffff;
-      border: 10px solid #ffc400;
-    }
-    .visualizer {
-      width: 100%;
-      height: 200px;
-      margin: 2rem auto;
-      border: 2px solid #ddd;
-      border-radius: 10px;
-      transition: background 0.2s ease;
-      background: black;
+      border-radius: 8px;
+      z-index: 10;
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Gyroscope Data Viewer</h1>
-    <div id="status" class="status waiting">Connecting to server...</div>
-    
-    <div class="data-grid">
-      <div class="data-card" id="alphaCard">
-        <div class="data-label">Alpha (Z-axis)</div>
-        <div class="data-value" id="alphaValue">--</div>
-        <div style="font-size: 0.8rem; color: #666;">Rotation around Z</div>
-      </div>
-      <div class="data-card" id="betaCard">
-        <div class="data-label">Beta (X-axis)</div>
-        <div class="data-value" id="betaValue">--</div>
-        <div style="font-size: 0.8rem; color: #666;">Front/Back tilt</div>
-      </div>
-      <div class="data-card" id="gammaCard">
-        <div class="data-label">Gamma (Y-axis)</div>
-        <div class="data-value" id="gammaValue">--</div>
-        <div style="font-size: 0.8rem; color: #666;">Left/Right tilt</div>
-      </div>
-    </div>
+  <!-- Babylon Viewer -->
+  <babylon-viewer id="babylonViewer"
+    source="https://assets.babylonjs.com/meshes/Demos/optimized/acrobaticPlane_variants.glb"
+    camera-behaviors="autoRotate"
+    camera-auto-rotate-speed="0"
+    camera-orbit="0 1.5 10"
+    camera-target="0 1 0"
+    shadow-quality="medium"
+  ></babylon-viewer>
 
-    <div class="visualizer" id="visualizer"></div>
-  </div>
+  <!-- Overlay Info -->
+  <div class="overlay" id="status">Connecting to server...</div>
 
   <script>
     let socket;
+    let viewer;
     let lastUpdate = 0;
 
-    function updateStatus(message, type) {
-      const statusEl = document.getElementById('status');
-      statusEl.textContent = message;
-      statusEl.className = `status ${type}`;
+    function updateStatus(msg) {
+      document.getElementById("status").textContent = msg;
     }
 
-    function updateGyroData(data) {
-      // Update values
-      document.getElementById('alphaValue').textContent = 
-        data.alpha ? data.alpha.toFixed(1) + '°' : '--';
-      document.getElementById('betaValue').textContent = 
-        data.beta ? data.beta.toFixed(1) + '°' : '--';
-      document.getElementById('gammaValue').textContent = 
-        data.gamma ? data.gamma.toFixed(1) + '°' : '--';
+    // Wait until viewer is loaded
+    window.addEventListener("DOMContentLoaded", () => {
+      viewer = document.getElementById("babylonViewer");
 
-      // Visual feedback for active data
-      ['alphaCard', 'betaCard', 'gammaCard'].forEach(id => {
-        document.getElementById(id).classList.remove('active');
-      });
-      
-      setTimeout(() => {
-        if (Math.abs(data.alpha) > 1) document.getElementById('alphaCard').classList.add('active');
-        if (Math.abs(data.beta) > 1) document.getElementById('betaCard').classList.add('active');
-        if (Math.abs(data.gamma) > 1) document.getElementById('gammaCard').classList.add('active');
-      }, 50);
-
-      updateVisualizer(data.beta, data.gamma, data.alpha);
-      lastUpdate = Date.now();
-    }
-
-    function updateVisualizer(beta, gamma, alpha) {
-      const visualizer = document.getElementById('visualizer');
-
-      // Gamma (Y-axis): -90 to 90 -> Hue (0 to 360)
-      const hue = ((gamma + 90) / 180) * 360;
-
-      // Beta (X-axis): -180 to 180 -> Brightness (50% to 100%)
-      const brightness = 50 + ((beta + 180) / 360) * 50;
-
-      // Alpha (Z-axis): Use texture if rotated past 90 degrees
-      const isStriped = Math.abs(alpha % 360) > 90;
-
-      const background = isStriped
-        ? `repeating-linear-gradient(45deg, hsl(${hue}, 100%, ${brightness}%) 0px, hsl(${hue}, 100%, ${brightness}%) 10px, black 10px, black 20px)`
-        : `hsl(${hue}, 100%, ${brightness}%)`;
-
-      visualizer.style.background = background;
-    }
+      // Connect WebSocket
+      connectWebSocket();
+    });
 
     function connectWebSocket() {
-      updateStatus('Connecting to server...', 'waiting');
+      updateStatus("Connecting to server...");
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${protocol}//${location.host}`;
-      
+
       socket = new WebSocket(wsUrl);
 
       socket.onopen = () => {
         socket.send(JSON.stringify({ type: "viewer" }));
-        updateStatus('Connected - Waiting for gyroscope data...', 'connected');
+        updateStatus("Connected - Awaiting gyro data...");
       };
 
       socket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
           if (data.type === "gyro") {
-            updateGyroData(data);
-            updateStatus('Receiving gyroscope data', 'connected');
+            applyGyroToCamera(data);
+            updateStatus("Receiving gyroscope data...");
           }
         } catch (e) {
           console.error("Error parsing message:", e);
@@ -181,24 +73,39 @@
       };
 
       socket.onclose = () => {
-        updateStatus('Disconnected from server', 'disconnected');
+        updateStatus("Disconnected. Retrying...");
         setTimeout(connectWebSocket, 3000);
       };
 
-      socket.onerror = (error) => {
-        console.error("WebSocket error:", error);
-        updateStatus('Connection error', 'disconnected');
+      socket.onerror = (err) => {
+        console.error("WebSocket error:", err);
+        updateStatus("Connection error");
       };
     }
 
-    // Check for stale data
+    function applyGyroToCamera({ alpha, beta, gamma }) {
+      lastUpdate = Date.now();
+
+      if (!viewer || !viewer.sceneManager || !viewer.sceneManager.activeCamera) return;
+      const camera = viewer.sceneManager.activeCamera;
+
+      // Convert degrees to radians
+      const toRad = deg => deg * Math.PI / 180;
+
+      // Adjust angles as needed based on your preferred mapping
+      const azimuthal = toRad(alpha || 0); // around Y
+      const polar = toRad(90 - (beta || 0)); // up/down
+
+      camera.alpha = azimuthal;  // horizontal orbit
+      camera.beta = Math.max(0.1, Math.min(Math.PI - 0.1, polar)); // vertical tilt, clamp to avoid flipping
+    }
+
+    // Fallback if data gets stale
     setInterval(() => {
-      if (lastUpdate && (Date.now() - lastUpdate) > 5000) {
-        updateStatus('No recent data received', 'waiting');
+      if (lastUpdate && (Date.now() - lastUpdate > 5000)) {
+        updateStatus("No recent gyro data");
       }
     }, 1000);
-
-    connectWebSocket();
   </script>
 </body>
 </html>
