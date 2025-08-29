@@ -84,7 +84,7 @@ wss.on("connection", (ws, req) => {
 app.use(express.static("public"));
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+server.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on Port: ${PORT}`);
   console.log('Available endpoints:');
   console.log(`- Sender: http://localhost:${PORT}/sender`);
